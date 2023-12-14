@@ -2,10 +2,10 @@ name: Unit tests
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 env:
   CC: clang
@@ -15,7 +15,7 @@ jobs:
   unit_tests:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/picsart/luabind:main
+      image: ghcr.io/${{ github.repository }}:master
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
