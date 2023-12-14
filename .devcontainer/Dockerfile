@@ -29,6 +29,7 @@ ARG GROUPID=1000
 
 # Create development user (me)
 ENV USER=me
+ENV LANG=C.UTF-8
 RUN groupadd --gid ${GROUPID} --force me && \
     useradd --shell /bin/bash --home-dir /home/me --uid ${USERID} --gid ${GROUPID} --create-home me && \
     echo "me ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
