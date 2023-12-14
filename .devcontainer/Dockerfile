@@ -27,7 +27,7 @@ RUN wget https://apt.llvm.org/llvm.sh && \
 ARG USERID=1000
 ARG GROUPID=1000
 
-# Create development user
+# Create development user (me)
 ENV USER=me
 RUN groupadd --gid ${GROUPID} --force me && \
     useradd --shell /bin/bash --home-dir /home/me --uid ${USERID} --gid ${GROUPID} --create-home me && \
