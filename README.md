@@ -60,7 +60,7 @@ luaL_dostring(L, R"--(
 Ordinary prcedure when developing and testing `luabind` library.
 
 ```sh
-git clone https://github.com/PicsArt/luabind.git
+git clone https://github.com/davits/luabind.git
 
 git submodule update --recursive --init
 
