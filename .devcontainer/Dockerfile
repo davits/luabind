@@ -15,13 +15,13 @@ RUN apt-get -q update -y && \
 
 RUN wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
-    ./llvm.sh 16 all && \
+    ./llvm.sh 17 all && \
     rm -f llvm.sh; \
-    ln -s /usr/bin/clang-16 /usr/bin/clang; \
-    ln -s /usr/bin/clang++-16 /usr/bin/clang++; \
-    ln -s /usr/bin/lldb-16 /usr/bin/lldb; \
-    ln -sf /usr/bin/llvm-cov-16 /usr/bin/gcov; \
-    ln -sf /usr/bin/clangd-16 /usr/bin/clangd;
+    ln -s /usr/bin/clang-17 /usr/bin/clang; \
+    ln -s /usr/bin/clang++-17 /usr/bin/clang++; \
+    ln -s /usr/bin/lldb-17 /usr/bin/lldb; \
+    ln -sf /usr/bin/llvm-cov-17 /usr/bin/gcov; \
+    ln -sf /usr/bin/clangd-17 /usr/bin/clangd;
 
 # Change these values by your uid/gid during build
 ARG USERID=1000
