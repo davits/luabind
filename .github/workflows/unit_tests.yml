@@ -27,7 +27,7 @@ jobs:
         submodules: recursive
 
     - name: Configure
-      run: cmake --preset=luabind -DCODE_COVERAGE=ON
+      run: cmake --preset=luabind -DLUABIND_CODE_COVERAGE=ON
     - name: Build
       run: cmake --build --preset=luabind --target all
     - name: Unit tests
