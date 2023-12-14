@@ -1,4 +1,6 @@
-## Introduction
+[![Unit tests](https://github.com/davits/luabind/actions/workflows/unit_tests.yml/badge.svg?branch=master&event=push)](https://github.com/davits/luabind/actions/workflows/unit_tests.yml)
+[![codecov](https://codecov.io/gh/davits/luabind/graph/badge.svg?token=WOZ5J1HU3F)](https://codecov.io/gh/davits/luabind)
+
 Luabind is a small header only library aiming to provide easy means to expose C++ functionality in Lua.
 Currently it supports inheritance, binding of class member functions, static functions, member variables and global functions.
 
