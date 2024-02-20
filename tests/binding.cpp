@@ -86,28 +86,29 @@ public:
 class AccountLuaTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         luabind::class_<Account>(L, "Account")
             .constructor<int>("newWithInt")
             .construct_shared<>("makeShared")
             .construct_shared<int>("makeSharedWithInt")
-            .function<&Account::getBalance>("getBalance")
-            .function<&Account::setBalance>("setBalance")
-            .function<&Account::service>("service")
-            .property<&Account::balance>("balance")
-            .property<&Account::bankName>("bankName")
-            .property<&Account::name, &Account::setName>("name");
+            .function("getBalance", &Account::getBalance)
+            .function("setBalance", &Account::setBalance)
+            .function("service", &Account::service)
+            .property("balance", &Account::balance)
+            .property("bankName", &Account::bankName)
+            .property("name", &Account::name, &Account::setName);
 
         luabind::class_<SpecialAccount, Account>(L, "SpecialAccount")
             .construct_shared<>("makeShared")
-            .property_readonly<&SpecialAccount::limit>("limit")
-            .function<&SpecialAccount::setLimit>("setLimit");
+            .property_readonly("limit", &SpecialAccount::limit)
+            .function("setLimit", &SpecialAccount::setLimit);
 
-        luabind::function<&createAccount>(L, "createAccount");
+        luabind::function(L, "createAccount", &createAccount);
 
-        luabind::function<&setAccount>(L, "setAccount");
-        luabind::function<&setSpecialAccount>(L, "setSpecialAccount");
+        luabind::function(L, "setAccount", &setAccount);
+        luabind::function(L, "setSpecialAccount", &setSpecialAccount);
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 
     void TearDown() override {
@@ -263,12 +264,12 @@ void validatePointers(Derived* d, Child1* c1, Child2* c2, Base* b) {
 class MultipleInheritance : public LuaTest {
 protected:
     void SetUp() override {
-        luabind::class_<Base>(L, "Base").property<&Base::b>("b");
-        luabind::class_<Child1, Base>(L, "Child1").property<&Child1::c1>("c1");
-        luabind::class_<Child2, Base>(L, "Child2").property<&Child2::c2>("c2");
-        luabind::class_<Derived, Child1, Child2>(L, "Derived").property<&Derived::d>("d");
+        luabind::class_<Base>(L, "Base").property("b", &Base::b);
+        luabind::class_<Child1, Base>(L, "Child1").property("c1", &Child1::c1);
+        luabind::class_<Child2, Base>(L, "Child2").property("c2", &Child2::c2);
+        luabind::class_<Derived, Child1, Child2>(L, "Derived").property("d", &Derived::d);
 
-        luabind::function<&validatePointers>(L, "validatePointers");
+        luabind::function(L, "validatePointers", &validatePointers);
     }
 };
 
@@ -313,10 +314,10 @@ void testUnboundByConstRef(const Unbound& u) {
 }
 
 TEST_F(LuaTest, Unbound) {
-    luabind::function<&create>(L, "create");
-    luabind::function<&testUnboundByRef>(L, "testUnboundByRef");
-    luabind::function<&testUnboundByConstRef>(L, "testUnboundByConstRef");
-    luabind::function<&testUnbound>(L, "testUnbound");
+    luabind::function(L, "create", &create);
+    luabind::function(L, "testUnbound", &testUnbound);
+    luabind::function(L, "testUnboundByRef", &testUnboundByRef);
+    luabind::function(L, "testUnboundByConstRef", &testUnboundByConstRef);
     [[maybe_unused]] int r = run(R"--(
         u = create()
         testUnboundByRef(u)
@@ -367,13 +368,13 @@ void testSharedPtrWithCopy(Account a) {
 }
 
 TEST_F(AccountLuaTest, SharedPtr) {
-    luabind::function<&testSharedPtr>(L, "testSharedPtr");
-    luabind::function<&testSharedPtrByValue>(L, "testSharedPtrByValue");
-    luabind::function<&testSharedPtrWithRawPtr>(L, "testSharedPtrWithRawPtr");
-    luabind::function<&testSharedPtrWithRef>(L, "testSharedPtrWithRef");
-    luabind::function<&testSharedPtrWithConstRawPtr>(L, "testSharedPtrWithConstRawPtr");
-    luabind::function<&testSharedPtrWithConstRef>(L, "testSharedPtrWithConstRef");
-    luabind::function<&testSharedPtrWithCopy>(L, "testSharedPtrWithCopy");
+    luabind::function(L, "testSharedPtr", &testSharedPtr);
+    luabind::function(L, "testSharedPtrByValue", &testSharedPtrByValue);
+    luabind::function(L, "testSharedPtrWithRawPtr", &testSharedPtrWithRawPtr);
+    luabind::function(L, "testSharedPtrWithRef", &testSharedPtrWithRef);
+    luabind::function(L, "testSharedPtrWithConstRawPtr", &testSharedPtrWithConstRawPtr);
+    luabind::function(L, "testSharedPtrWithConstRef", &testSharedPtrWithConstRef);
+    luabind::function(L, "testSharedPtrWithCopy", &testSharedPtrWithCopy);
     auto a = runWithResult<std::shared_ptr<Account>>(R"--(
         a = Account:makeSharedWithInt(10)
         return a;
@@ -423,13 +424,14 @@ private:
 class ArrayTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         // clang-format off
         luabind::class_<Array>(L, "Array")
-            .constructor<&Array::ctor>("new")
-            .array_access<&Array::getElement, &Array::setElement>();
+            .constructor("new", &Array::ctor)
+            .array_access(&Array::getElement, &Array::setElement);
 
         // clang-format on
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 
     void TearDown() override {}

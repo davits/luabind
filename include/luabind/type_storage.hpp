@@ -34,14 +34,10 @@ struct type_info {
     const std::vector<type_info*> bases;
     lua_CFunction index;
     lua_CFunction new_index;
-    lua_CFunction array_access_getter;
-    lua_CFunction array_access_setter;
-    std::map<std::string, lua_CFunction, std::less<>> functions;
-    std::map<std::string, property_data, std::less<>> properties;
 
-    void get_metatable(lua_State* L) const {
-        luaL_getmetatable(L, name.c_str());
-    }
+    static constexpr int functions_idx = 0;
+    static constexpr int properties_idx = 1;
+    static constexpr int array_access_idx = 3;
 
     type_info(lua_State* L,
               std::string&& type_name,
@@ -51,12 +47,95 @@ struct type_info {
         : name(std::move(type_name))
         , bases(std::move(bases))
         , index(index_functor)
-        , new_index(new_index_functor)
-        , array_access_getter(nullptr)
-        , array_access_setter(nullptr) {
-        luaL_newmetatable(L, name.c_str());
+        , new_index(new_index_functor) {
+        int r = luaL_newmetatable(L, name.c_str());
+        if (r == 0) {
+            reportError("Type already exists.");
+        }
+        lua_newtable(L);
+        lua_rawseti(L, -2, functions_idx);
+        lua_newtable(L);
+        lua_rawseti(L, -2, properties_idx);
+
         lua_setglobal(L, name.c_str());
         //  stack is clean
+    }
+
+    void get_metatable(lua_State* L) const {
+        luaL_getmetatable(L, name.c_str());
+    }
+
+    // [-0, +1, -]
+    void get_functions_table(lua_State* L) const {
+        get_metatable(L);
+        lua_rawgeti(L, -1, functions_idx);
+        lua_remove(L, -2);
+    }
+
+    // [-0, +1, -]
+    void get_property_table(lua_State* L) const {
+        get_metatable(L);
+        lua_rawgeti(L, -1, properties_idx);
+        lua_remove(L, -2);
+    }
+
+    /**
+     * Sets the member function in the metatable of the class
+     * The function is the value at the top of the stack
+     * The name of the function is the value just below the top
+     * [-2, +0, -]
+     */
+    void set_function(lua_State* L) {
+        get_functions_table(L);
+        lua_pushvalue(L, -3);
+        lua_pushvalue(L, -3);
+        lua_rawset(L, -3);
+        lua_pop(L, 3);
+    }
+
+    /// [-0, +1, -]
+    /**
+     * Gets the member function from the metatable of the class
+     * The name of the function is the value at the top of the stack
+     */
+    int get_function(lua_State* L) {
+        get_functions_table(L);
+        lua_pushvalue(L, -2);
+        int r = lua_rawget(L, -2);
+        lua_remove(L, -2);
+        return r;
+    }
+
+    // [-2, +0, -]
+    void set_property(lua_State* L) {
+        get_property_table(L);
+        lua_pushvalue(L, -3);
+        lua_pushvalue(L, -3);
+        lua_rawset(L, -3);
+        lua_pop(L, 3);
+    }
+
+    // [-0, +1, -]
+    int get_property(lua_State* L) {
+        get_property_table(L);
+        lua_pushvalue(L, -2);
+        int r = lua_rawget(L, -2);
+        lua_remove(L, -2);
+        return r;
+    }
+
+    void set_array_access(lua_State* L) {
+        get_metatable(L);
+        lua_pushvalue(L, -2);
+        lua_rawseti(L, -2, array_access_idx);
+        lua_pop(L, 2); // pop metatable and array getter
+    }
+
+    int get_array_access(lua_State* L) {
+        get_metatable(L);
+        int r = lua_rawgeti(L, -1, array_access_idx);
+        lua_remove(L, -2);
+        return r;
     }
 };
 
@@ -66,7 +145,7 @@ private:
 
 public:
     static type_storage& get_instance(lua_State* L) {
-        static const char* storage_name = "LuaBindTypeStorage";
+        static const char* storage_name = "luabind::type_storage";
         int r = lua_getfield(L, LUA_REGISTRYINDEX, storage_name);
         if (r == LUA_TUSERDATA) {
             void* p = lua_touserdata(L, -1);
@@ -82,7 +161,7 @@ public:
         *ud = instance;
 
         lua_newtable(L);
-        lua_pushstring(L, "__gc");
+        lua_pushliteral(L, "__gc");
         lua_pushcfunction(L, [](lua_State* L) -> int {
             void* p = lua_touserdata(L, 1);
             auto ud = static_cast<type_storage**>(p);

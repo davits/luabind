@@ -16,9 +16,10 @@ int Deletable::deletedCount = 0;
 class ExplicitDeleteTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         luabind::class_<Deletable>(L, "Deletable").constructor<>("new").construct_shared<>("makeShared");
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 };
 
