@@ -203,14 +203,14 @@ TEST_F(StrLuaTest, WrapperErrors) {
         s = String:new('abc')
         s:set()
     )--",
-        testing::StartsWith("Invalid number of arguments, should be 1, but 0 were given."));
+        testing::StartsWith("Invalid number of arguments, should be 2, but 1 were given."));
 
     runExpectingError(
         R"--(
         s = String:createString('abc')
         s:set('def', 2, 3)
     )--",
-        testing::StartsWith("Invalid number of arguments, should be 1, but 3 were given."));
+        testing::StartsWith("Invalid number of arguments, should be 2, but 4 were given."));
 
     runExpectingError(
         R"--(

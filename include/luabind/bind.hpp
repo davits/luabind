@@ -13,7 +13,8 @@ namespace luabind {
 
 template <typename Type, typename... Bases>
 class class_ {
-    static_assert(std::is_base_of_v<Object, Type>, "Type should be descendant from luabind::Object.");
+    static_assert(std::is_base_of_v<Object, Type>,
+                  "Type should be descendant from luabind::Object to ensure correct pointer transformations.");
 
 public:
     class_(lua_State* L, const std::string_view name)
@@ -62,7 +63,7 @@ public:
         return *this;
     }
 
-    template <typename Func>
+    template <ValidMemberFunctor<Type> Func>
     class_& function(const std::string_view name, Func&& func) {
         value_mirror<std::string_view>::to_lua(_L, name);
         functor_to_lua(_L, std::forward<Func>(func));

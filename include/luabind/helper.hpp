@@ -15,13 +15,40 @@ namespace luabind {
 // 4. Stateful Lambda functor
 
 template <typename T>
+struct function_first_arg_helper {
+    using type = void;
+};
+
+template <typename R, typename First, typename... Args>
+struct function_first_arg_helper<R(First, Args...)> {
+    using type = First;
+};
+
+template <typename R, typename First, typename... Args>
+struct function_first_arg_helper<R(First, Args...) const> {
+    using type = First;
+};
+
+template <typename R, typename First, typename... Args>
+struct function_first_arg_helper<R(First, Args...) noexcept> {
+    using type = First;
+};
+
+template <typename R, typename First, typename... Args>
+struct function_first_arg_helper<R(First, Args...) const noexcept> {
+    using type = First;
+};
+
+template <typename T>
+using function_first_arg_t = typename function_first_arg_helper<T>::type;
+
+template <typename T>
 struct callable_object_helper;
 
 template <typename R, typename T, typename... Args>
 struct callable_object_helper<R (T::*)(Args...)> {
     using type = R(Args...);
-    using stateless_lambda_type = R (*)(Args...);
-    static constexpr bool is_noexcept = false;
+    using lambda_convertible_type = R (*)(Args...);
 };
 
 template <typename R, typename T, typename... Args>
@@ -29,8 +56,7 @@ struct callable_object_helper<R (T::*)(Args...) const> : callable_object_helper<
 
 template <typename R, typename T, typename... Args>
 struct callable_object_helper<R (T::*)(Args...) noexcept> : callable_object_helper<R (T::*)(Args...)> {
-    using stateless_lambda_type = R (*)(Args...) noexcept;
-    static constexpr bool is_noexcept = true;
+    using lambda_convertible_type = R (*)(Args...) noexcept;
 };
 
 template <typename R, typename T, typename... Args>
@@ -38,49 +64,39 @@ struct callable_object_helper<R (T::*)(Args...) const noexcept> : callable_objec
 
 template <typename T>
 struct callable_helper {
+    static_assert(!std::is_function_v<T>, "Please use function pointer notation.");
     using type = typename callable_object_helper<decltype(&T::operator())>::type;
-    static constexpr bool is_noexcept = callable_object_helper<decltype(&T::operator())>::is_noexcept;
     static constexpr bool is_function_ptr = false;
-    static constexpr bool is_member_function_ptr = false;
     using self_type = void*;
 };
 
 template <typename R, typename... Args>
 struct callable_helper<R (*)(Args...)> {
     using type = R(Args...);
-    static constexpr bool is_noexcept = false;
     static constexpr bool is_function_ptr = true;
-    static constexpr bool is_member_function_ptr = false;
     using self_type = void*;
 };
 
 template <typename R, typename... Args>
-struct callable_helper<R (*)(Args...) noexcept> : callable_helper<R (*)(Args...)> {
-    static constexpr bool is_noexcept = true;
-};
+struct callable_helper<R (*)(Args...) noexcept> : callable_helper<R (*)(Args...)> {};
 
 template <typename R, typename T, typename... Args>
 struct callable_helper<R (T::*)(Args...)> : callable_helper<R (*)(T*, Args...)> {
-    static constexpr bool is_member_function_ptr = true;
     using self_type = T*;
 };
 
 template <typename R, typename T, typename... Args>
 struct callable_helper<R (T::*)(Args...) noexcept> : callable_helper<R (*)(T*, Args...)> {
-    static constexpr bool is_noexcept = true;
-    static constexpr bool is_member_function_ptr = true;
     using self_type = T*;
 };
 
 template <typename R, typename T, typename... Args>
 struct callable_helper<R (T::*)(Args...) const> : callable_helper<R (*)(const T*, Args...)> {
-    static constexpr bool is_member_function_ptr = true;
     using self_type = const T*;
 };
 
 template <typename R, typename T, typename... Args>
 struct callable_helper<R (T::*)(Args...) const noexcept> : callable_helper<R (*)(const T*, Args...) noexcept> {
-    static constexpr bool is_member_function_ptr = true;
     using self_type = const T*;
 };
 
@@ -99,40 +115,43 @@ template <typename F>
 concept LuaCFunction = requires(F f) { static_cast<lua_CFunction>(f); };
 
 template <typename F>
-concept CFunction = !LuaCFunction<F> && callable_helper<F>::is_function_ptr;
+using lambda_convertible_t = typename callable_object_helper<decltype(&F::operator())>::lambda_convertible_type;
 
 template <typename F>
-using stateless_lambda_fptr_t = typename callable_object_helper<decltype(&F::operator())>::stateless_lambda_type;
-
-template <typename F>
-concept StatelessLambda = requires(F f) { static_cast<stateless_lambda_fptr_t<F>>(f); };
+concept StatelessLambda = requires(F f) { static_cast<lambda_convertible_t<F>>(f); };
 
 template <typename T>
-concept StateLambda = !StatelessLambda<T> && requires { decltype(&T::operator()) {}; };
+concept CallableObject = requires { decltype(&T::operator()) {}; };
 
 template <typename F>
 using signature_t = typename callable_helper<std::remove_cvref_t<F>>::type;
 
 template <typename F>
+using first_arg_t = function_first_arg_t<signature_t<F>>;
+
+template <typename T>
+using strip_t = std::remove_const_t<std::remove_pointer_t<std::remove_cvref_t<T>>>;
+
+template <typename Functor, typename Class>
+concept ValidMemberFunctor =
+    LuaCFunction<Functor> ||
+    ((std::is_pointer_v<first_arg_t<Functor>> ||
+      std::is_reference_v<first_arg_t<Functor>>)&&std::is_same_v<strip_t<first_arg_t<Functor>>, Class>);
+
+template <typename F>
 using self_t = typename callable_helper<std::remove_cvref_t<F>>::self_type;
 
 template <typename F>
-constexpr bool lua_c_function_v = LuaCFunction<F>;
+constexpr bool is_lua_c_function_v = LuaCFunction<F>;
 
 template <typename F>
-constexpr bool function_ptr_v = CFunction<F>;
-
-template <typename F>
-constexpr bool member_function_ptr_v = callable_helper<std::remove_cvref_t<F>>::is_member_function_ptr;
+constexpr bool is_function_ptr_v = std::is_pointer_v<F> && std::is_function_v<std::remove_pointer_t<F>>;
 
 template <typename F>
 constexpr bool stateless_lambda_v = StatelessLambda<F>;
 
 template <typename F>
-constexpr bool state_lambda_v = StateLambda<F>;
-
-template <typename F>
-constexpr bool is_noexcept_v = callable_helper<std::remove_cvref_t<F>>::is_noexcept;
+constexpr bool callable_object_v = CallableObject<F>;
 
 } // namespace luabind
 

@@ -37,16 +37,16 @@ struct ctor_wrapper : exception_safe_wrapper<ctor_wrapper<Type, Args...>> {
     static_assert(std::conjunction_v<valid_lua_arg<Args>...>);
 
     static int invoke(lua_State* L) {
-        return indexed_call_helper(L, index_sequence<2, sizeof...(Args)> {});
-    }
-
-    template <size_t... Indices>
-    static int indexed_call_helper(lua_State* L, std::index_sequence<Indices...>) {
         // 1st argument is the metatable
         int num_args = lua_gettop(L) - 1;
         if (num_args != sizeof...(Args)) {
             reportError("Invalid number of arguments, should be %zu, but %i were given.", sizeof...(Args), num_args);
         }
+        return indexed_call_helper(L, index_sequence<2, sizeof...(Args)> {});
+    }
+
+    template <size_t... Indices>
+    static int indexed_call_helper(lua_State* L, std::index_sequence<Indices...>) {
         return lua_user_data<Type>::to_lua(L, value_mirror<Args>::from_lua(L, Indices)...);
     }
 };
@@ -56,16 +56,16 @@ struct shared_ctor_wrapper : exception_safe_wrapper<shared_ctor_wrapper<Type, Ar
     static_assert(std::conjunction_v<valid_lua_arg<Args>...>);
 
     static int invoke(lua_State* L) {
-        return indexed_call_helper(L, index_sequence<2, sizeof...(Args)> {});
-    }
-
-    template <size_t... Indices>
-    static int indexed_call_helper(lua_State* L, std::index_sequence<Indices...>) {
         // 1st argument is the metatable
         int num_args = lua_gettop(L) - 1;
         if (num_args != sizeof...(Args)) {
             reportError("Invalid number of arguments, should be %zu, but %i were given.", sizeof...(Args), num_args);
         }
+        return indexed_call_helper(L, index_sequence<2, sizeof...(Args)> {});
+    }
+
+    template <size_t... Indices>
+    static int indexed_call_helper(lua_State* L, std::index_sequence<Indices...>) {
         return shared_user_data::to_lua(L, std::make_shared<Type>(value_mirror<Args>::from_lua(L, Indices)...));
     }
 };
@@ -148,7 +148,7 @@ struct functor_wrapper {
 
     static int invoke(lua_State* L) {
         const int func_idx = lua_upvalueindex(1);
-        if constexpr (function_ptr_v<Functor>) {
+        if constexpr (is_function_ptr_v<Functor>) {
             Functor func = reinterpret_cast<Functor>(lua_touserdata(L, func_idx));
             return invoker<Functor, Signature, ArgStart>::invoke(L, func);
         } else {
@@ -162,7 +162,7 @@ struct functor_wrapper {
     }
 
     static void to_lua(lua_State* L, Functor&& func) {
-        if constexpr (function_ptr_v<Functor>) {
+        if constexpr (is_function_ptr_v<Functor>) {
             lua_pushlightuserdata(L, reinterpret_cast<void*>(func));
             lua_pushcclosure(L, &invoke, 1); // create closure with user data as upvalue
         } else {
@@ -189,16 +189,16 @@ struct functor_wrapper {
 template <typename Functor, size_t ArgStart = 1>
 void functor_to_lua(lua_State* L, Functor&& func) {
     using F = std::remove_cvref_t<Functor>;
-    if constexpr (lua_c_function_v<F>) {
+    if constexpr (is_lua_c_function_v<F>) {
         lua_pushcfunction(L, func);
-    } else if constexpr (member_function_ptr_v<F>) {
+    } else if constexpr (std::is_member_function_pointer_v<F>) {
         functor_to_lua(L, mem_fun_wrapper<F>(func));
-    } else if (function_ptr_v<F>) {
+    } else if (is_function_ptr_v<F>) {
         functor_wrapper<F, ArgStart>::to_lua(L, func);
     } else if constexpr (stateless_lambda_v<F>) {
-        auto fptr = static_cast<stateless_lambda_fptr_t<F>>(func);
-        functor_wrapper<stateless_lambda_fptr_t<F>, ArgStart>::to_lua(L, fptr);
-    } else if constexpr (state_lambda_v<F>) {
+        auto fptr = static_cast<lambda_convertible_t<F>>(func);
+        functor_wrapper<lambda_convertible_t<F>, ArgStart>::to_lua(L, fptr);
+    } else if constexpr (callable_object_v<F>) {
         functor_wrapper<F, ArgStart>::to_lua(L, std::forward<Functor>(func));
     } else {
         static_assert("Unsupported function type.");
