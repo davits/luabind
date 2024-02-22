@@ -1,4 +1,3 @@
-include(CTest)
 include(GoogleTest)
 
 add_executable(base_class_binding base_class_binding.cpp lua_test.hpp)
