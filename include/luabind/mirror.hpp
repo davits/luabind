@@ -6,11 +6,8 @@
 #include "type_storage.hpp"
 #include "user_data.hpp"
 
-#include <map>
 #include <memory>
 #include <string>
-#include <typeindex>
-#include <unordered_map>
 
 namespace luabind {
 

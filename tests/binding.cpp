@@ -97,17 +97,19 @@ protected:
             .property("balance", &Account::balance)
             .property("bankName", &Account::bankName)
             .property("name", &Account::name, &Account::setName);
+        EXPECT_EQ(lua_gettop(L), top);
 
         luabind::class_<SpecialAccount, Account>(L, "SpecialAccount")
             .construct_shared<>("makeShared")
             .property_readonly("limit", &SpecialAccount::limit)
             .function("setLimit", &SpecialAccount::setLimit);
+        EXPECT_EQ(lua_gettop(L), top);
 
         luabind::function(L, "createAccount", &createAccount);
+        EXPECT_EQ(lua_gettop(L), top);
 
         luabind::function(L, "setAccount", &setAccount);
         luabind::function(L, "setSpecialAccount", &setSpecialAccount);
-
         EXPECT_EQ(lua_gettop(L), top);
     }
 

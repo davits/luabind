@@ -65,9 +65,8 @@ public:
 
     template <ValidMemberFunctor<Type> Func>
     class_& function(const std::string_view name, Func&& func) {
-        value_mirror<std::string_view>::to_lua(_L, name);
         functor_to_lua(_L, std::forward<Func>(func));
-        _info->set_function(_L);
+        _info->set_function(_L, std::string {name});
         return *this;
     }
 
@@ -89,11 +88,8 @@ public:
     template <typename Functor>
         requires(!std::is_member_object_pointer_v<Functor>)
     class_& property(const std::string_view name, Functor&& getter) {
-        value_mirror<std::string_view>::to_lua(_L, name);
-        lua_newtable(_L);
         functor_to_lua(_L, std::forward<Functor>(getter));
-        lua_rawseti(_L, -2, 1);
-        _info->set_property(_L);
+        _info->set_property_readonly(_L, std::string {name});
         return *this;
     }
 
@@ -114,39 +110,31 @@ public:
     template <typename GetFunctor, typename SetFunctor>
         requires(!std::is_member_object_pointer_v<GetFunctor> && !std::is_member_object_pointer_v<SetFunctor>)
     class_& property(const std::string_view name, GetFunctor&& getter, SetFunctor&& setter) {
-        value_mirror<std::string_view>::to_lua(_L, name);
-        lua_newtable(_L);
         functor_to_lua(_L, std::forward<GetFunctor>(getter));
-        lua_rawseti(_L, -2, 1);
         functor_to_lua(_L, std::forward<SetFunctor>(setter));
-        lua_rawseti(_L, -2, 2);
-        _info->set_property(_L);
+        _info->set_property(_L, std::string {name});
         return *this;
     }
 
     template <typename GetFunctor>
     class_& array_access(GetFunctor&& getter) {
-        lua_newtable(_L);
         functor_to_lua(_L, std::forward<GetFunctor>(getter));
-        lua_rawseti(_L, -2, 1);
-        _info->set_array_access(_L);
+        _info->set_array_getter(_L);
         return *this;
     }
 
     template <typename GetFunctor, typename SetFunctor>
     class_& array_access(GetFunctor&& getter, SetFunctor&& setter) {
-        lua_newtable(_L);
         functor_to_lua(_L, std::forward<GetFunctor>(getter));
-        lua_rawseti(_L, -2, 1);
         functor_to_lua(_L, std::forward<SetFunctor>(setter));
-        lua_rawseti(_L, -2, 2);
         _info->set_array_access(_L);
         return *this;
     }
 
 private:
     static int index_(lua_State* L) {
-        int r = index_impl(L);
+        auto* ud = user_data::from_lua(L, 1);
+        int r = index_impl(L, ud->info);
         if (r >= 0) return r;
         // if there is no result from bound C++, look in the lua table bound to this object
         user_data::get_custom_table(L, 1); // custom table
@@ -155,53 +143,41 @@ private:
         return 1;
     }
 
-    static int index_impl(lua_State* L) {
-        type_info* info = type_storage::find_type_info<Type>(L);
-
-        const int top = lua_gettop(L);
+    static int index_impl(lua_State* L, type_info* info) {
         const bool is_integer = lua_isinteger(L, 2);
         const int key_type = lua_type(L, 2);
         if (!is_integer && key_type != LUA_TSTRING) {
             luaL_error(L, "Key type should be integer or string, '%s' is provided.", lua_typename(L, key_type));
         }
         if (is_integer) {
-            int r = info->get_array_access(L);
+            const int top = lua_gettop(L);
+            int r = info->get_array_getter(L);
             if (r == LUA_TNIL) {
                 luaL_error(L, "Type '%s' does not provide array get access.", info->name.c_str());
             }
-            r = lua_rawgeti(L, -1, 1);
-            if (r == LUA_TNIL) {
-                luaL_error(L, "Type '%s' does not provide array get access.", info->name.c_str());
-            }
-            lua_remove(L, -2); // remove array access table
             lua_pushvalue(L, 1); // self
             lua_pushvalue(L, 2); // key
             lua_call(L, 2, LUA_MULTRET);
             return lua_gettop(L) - top;
         }
         // key is a string
-        int r = info->get_property(L);
-        if (r != LUA_TNIL) {
-            r = lua_rawgeti(L, -1, 1);
-            if (r == LUA_TNIL) {
-                luaL_error(L, "Type '%s' does not provide property get access.", info->name.c_str());
-            }
-            lua_remove(L, -2); // remove property table
+        auto e = info->get_entry(L, 2, false);
+        switch (e.type) {
+        case entry_type::property: {
+            const int top = lua_gettop(L) - 1; // -1 for property getter
             lua_pushvalue(L, 1); // self
             lua_call(L, 1, LUA_MULTRET); // call property getter
             return lua_gettop(L) - top;
         }
-        lua_pop(L, 1); // pop nil
-
-        r = info->get_function(L);
-        if (r != LUA_TNIL) {
+        case entry_type::function:
             return 1; // return function on the top of the stack
+        case entry_type::none:
+            break;
         }
-        lua_pop(L, 1);
         //  lua doesn't do recursive index lookup through metatables
         //  if __index is bound to a C function, so we do it ourselves.
         for (type_info* base : info->bases) {
-            int r = base->index(L);
+            int r = base->index(L, base);
             if (r >= 0) {
                 return r;
             }
@@ -210,7 +186,8 @@ private:
     }
 
     static int new_index(lua_State* L) {
-        int r = new_index_impl(L);
+        auto* ud = user_data::from_lua(L, 1);
+        int r = new_index_impl(L, ud->info);
         if (r >= 0) return r;
         // if there is no result in C++ add new value to the lua table bound to this object
         user_data::get_custom_table(L, 1); // custom table
@@ -220,25 +197,18 @@ private:
         return 0;
     }
 
-    static int new_index_impl(lua_State* L) {
-        type_info* info = type_storage::find_type_info<Type>(L);
-
-        const int top = lua_gettop(L);
+    static int new_index_impl(lua_State* L, type_info* info) {
         const bool is_integer = lua_isinteger(L, 2);
         const int key_type = lua_type(L, 2);
         if (!is_integer && key_type != LUA_TSTRING) {
             luaL_error(L, "Key type should be integer or string, '%s' is provided.", lua_typename(L, key_type));
         }
         if (is_integer) {
-            int r = info->get_array_access(L);
+            int r = info->get_array_setter(L);
             if (r == LUA_TNIL) {
                 luaL_error(L, "Type '%s' does not provide array set access.", info->name.c_str());
             }
-            r = lua_rawgeti(L, -1, 2);
-            if (r == LUA_TNIL) {
-                luaL_error(L, "Type '%s' does not provide array set access.", info->name.c_str());
-            }
-            lua_remove(L, -2); // remove array access table
+            const int top = lua_gettop(L) - 1; // -1 for array setter
             lua_pushvalue(L, 1); // self
             lua_pushvalue(L, 2); // key
             lua_pushvalue(L, 3); // value
@@ -246,32 +216,34 @@ private:
             return lua_gettop(L) - top;
         }
         // key is a string
-        lua_pushvalue(L, 2);
-        int r = info->get_property(L);
-        if (r != LUA_TNIL) {
-            lua_remove(L, -2); // remove key
-            r = lua_rawgeti(L, -1, 2);
-            if (r == LUA_TNIL) {
+        auto e = info->get_entry(L, 2, true);
+        switch (e.type) {
+        case entry_type::property: {
+            if (!e.has_setter()) {
                 auto key = value_mirror<std::string_view>::from_lua(L, 2);
                 luaL_error(L, "Property '%s' is read only.", key.data());
             }
-            lua_remove(L, -2); // remove property table
+            const int top = lua_gettop(L) - 1; // -1 for property setter
             lua_pushvalue(L, 1); // self
             lua_pushvalue(L, 3); // value
             lua_call(L, 2, LUA_MULTRET); // call property setter
             return lua_gettop(L) - top;
         }
-        lua_pop(L, 1);
+        case entry_type::function:
+            return -1; // asigning to a function, redirect to custom table
+        case entry_type::none:
+            break;
+        }
 
         // lua doesn't do recursive index lookup through metatables
         // if __new_index is bound to a C function, so we do it ourselves.
         for (type_info* base : info->bases) {
-            int r = base->new_index(L);
+            int r = base->new_index(L, base);
             if (r >= 0) {
                 return r;
             }
         }
-        return -1;
+        return -1; // redirect to custom table
     }
 
 private:

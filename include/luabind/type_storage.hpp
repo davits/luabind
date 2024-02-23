@@ -4,46 +4,80 @@
 #include "lua.hpp"
 #include "exception.hpp"
 
-#include <map>
-#include <memory>
+#include <unordered_map>
 #include <string>
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 #include <vector>
 
-#include <iostream>
-
 namespace luabind {
 
-struct property_data {
-    lua_CFunction getter;
-    lua_CFunction setter;
-
-    property_data(lua_CFunction g)
-        : getter(g)
-        , setter(nullptr) {}
-
-    property_data(lua_CFunction g, lua_CFunction s)
-        : getter(g)
-        , setter(s) {}
+enum class entry_type {
+    none,
+    function,
+    property,
 };
+
+struct entry {
+    entry_type type;
+    int getter;
+    int setter;
+
+    bool has_setter() const {
+        return setter != 0;
+    }
+
+    static entry none() {
+        return entry {.type = entry_type::none};
+    }
+
+    static entry function(int idx) {
+        return entry {.type = entry_type::function, .getter = idx, .setter = 0};
+    }
+
+    static entry property(int getter) {
+        return entry {.type = entry_type::property, .getter = getter, .setter = 0};
+    }
+
+    static entry property(int getter, int setter) {
+        return entry {.type = entry_type::property, .getter = getter, .setter = setter};
+    }
+};
+
+struct string_hash {
+    using is_transparent = void;
+    [[nodiscard]] size_t operator()(const char* txt) const {
+        return std::hash<std::string_view> {}(txt);
+    }
+    [[nodiscard]] size_t operator()(std::string_view txt) const {
+        return std::hash<std::string_view> {}(txt);
+    }
+    [[nodiscard]] size_t operator()(const std::string& txt) const {
+        return std::hash<std::string> {}(txt);
+    }
+};
+
+struct type_info;
+
+using index_function_t = int (*)(lua_State*, type_info*);
 
 struct type_info {
     const std::string name;
     const std::vector<type_info*> bases;
-    lua_CFunction index;
-    lua_CFunction new_index;
+    index_function_t index;
+    index_function_t new_index;
 
-    static constexpr int functions_idx = 0;
-    static constexpr int properties_idx = 1;
-    static constexpr int array_access_idx = 3;
+    int array_getter = 0;
+    int array_setter = 0;
+    std::unordered_map<std::string, entry, string_hash, std::equal_to<>> entries;
+    lua_State* storage;
 
     type_info(lua_State* L,
               std::string&& type_name,
               std::vector<type_info*>&& bases,
-              lua_CFunction index_functor,
-              lua_CFunction new_index_functor)
+              index_function_t index_functor,
+              index_function_t new_index_functor)
         : name(std::move(type_name))
         , bases(std::move(bases))
         , index(index_functor)
@@ -52,90 +86,101 @@ struct type_info {
         if (r == 0) {
             reportError("Type already exists.");
         }
-        lua_newtable(L);
-        lua_rawseti(L, -2, functions_idx);
-        lua_newtable(L);
-        lua_rawseti(L, -2, properties_idx);
+        storage = lua_newthread(L);
+        lua_checkstack(storage, 128);
+        lua_rawseti(L, -2, 1);
 
         lua_setglobal(L, name.c_str());
         //  stack is clean
+    }
+
+    ~type_info() {
+        // TODO add metatable cleanup
     }
 
     void get_metatable(lua_State* L) const {
         luaL_getmetatable(L, name.c_str());
     }
 
-    // [-0, +1, -]
-    void get_functions_table(lua_State* L) const {
-        get_metatable(L);
-        lua_rawgeti(L, -1, functions_idx);
-        lua_remove(L, -2);
+    std::string_view to_string_view(lua_State* L, int idx) {
+        size_t len;
+        const char* str = lua_tolstring(L, idx, &len);
+        return std::string_view {str, len};
     }
 
-    // [-0, +1, -]
-    void get_property_table(lua_State* L) const {
-        get_metatable(L);
-        lua_rawgeti(L, -1, properties_idx);
-        lua_remove(L, -2);
+    // [-0, +0|+2, -]
+    entry get_entry(lua_State* L, int key_idx, bool setter) {
+        const auto name = to_string_view(L, key_idx);
+        auto it = entries.find(name);
+        if (it == entries.end()) {
+            return entry::none();
+        }
+        const auto& e = it->second;
+        const int idx = setter ? e.setter : e.getter;
+        if (idx != 0) {
+            lua_pushvalue(storage, idx);
+            lua_xmove(storage, L, 1);
+        }
+        return e;
     }
 
     /**
      * Sets the member function in the metatable of the class
      * The function is the value at the top of the stack
      * The name of the function is the value just below the top
-     * [-2, +0, -]
+     * [-1, +0, -]
      */
-    void set_function(lua_State* L) {
-        get_functions_table(L);
-        lua_pushvalue(L, -3);
-        lua_pushvalue(L, -3);
-        lua_rawset(L, -3);
-        lua_pop(L, 3);
+    void set_function(lua_State* L, std::string&& name) {
+        lua_xmove(L, storage, 1);
+        const int idx = lua_gettop(storage);
+        entries.try_emplace(std::move(name), entry::function(idx));
     }
 
-    /// [-0, +1, -]
-    /**
-     * Gets the member function from the metatable of the class
-     * The name of the function is the value at the top of the stack
-     */
-    int get_function(lua_State* L) {
-        get_functions_table(L);
-        lua_pushvalue(L, -2);
-        int r = lua_rawget(L, -2);
-        lua_remove(L, -2);
-        return r;
+    // [-1, +0, -]
+    void set_property_readonly(lua_State* L, std::string&& name) {
+        lua_xmove(L, storage, 1);
+        const int idx = lua_gettop(storage);
+        entries.try_emplace(std::move(name), entry::property(idx));
     }
 
     // [-2, +0, -]
-    void set_property(lua_State* L) {
-        get_property_table(L);
-        lua_pushvalue(L, -3);
-        lua_pushvalue(L, -3);
-        lua_rawset(L, -3);
-        lua_pop(L, 3);
+    void set_property(lua_State* L, std::string&& name) {
+        lua_xmove(L, storage, 2);
+        const int setter_idx = lua_gettop(storage);
+        const int getter_idx = setter_idx - 1;
+        entries.try_emplace(std::move(name), entry::property(getter_idx, setter_idx));
     }
 
-    // [-0, +1, -]
-    int get_property(lua_State* L) {
-        get_property_table(L);
-        lua_pushvalue(L, -2);
-        int r = lua_rawget(L, -2);
-        lua_remove(L, -2);
-        return r;
+    // [-1, +0, -]
+    void set_array_getter(lua_State* L) {
+        lua_xmove(L, storage, 1);
+        array_getter = lua_gettop(storage);
     }
 
+    // [-2, +0, -]
     void set_array_access(lua_State* L) {
-        get_metatable(L);
-        lua_pushvalue(L, -2);
-        lua_rawseti(L, -2, array_access_idx);
-        lua_pop(L, 2); // pop metatable and array getter
+        lua_xmove(L, storage, 2);
+        array_setter = lua_gettop(storage);
+        array_getter = array_setter - 1;
     }
 
-    int get_array_access(lua_State* L) {
-        get_metatable(L);
-        int r = lua_rawgeti(L, -1, array_access_idx);
-        lua_remove(L, -2);
-        return r;
+    // [-0, +0|+1, -]
+    int get_array_getter(lua_State* L) {
+        if (array_getter == 0) {
+            return LUA_TNIL;
+        }
+        lua_pushvalue(storage, array_getter);
+        lua_xmove(storage, L, 1);
+        return lua_type(L, -1);
+    }
+
+    int get_array_setter(lua_State* L) {
+        if (array_setter == 0) {
+            return LUA_TNIL;
+        }
+        lua_pushvalue(storage, array_setter);
+        lua_xmove(storage, L, 1);
+        return lua_type(L, -1);
     }
 };
 
@@ -177,7 +222,7 @@ public:
 
     template <typename Type, typename... Bases>
     static type_info*
-    add_type_info(lua_State* L, std::string name, lua_CFunction index_functor, lua_CFunction new_index_functor) {
+    add_type_info(lua_State* L, std::string name, index_function_t index_functor, index_function_t new_index_functor) {
         type_storage& instance = get_instance(L);
         const auto index = std::type_index(typeid(Type));
         auto it = instance.m_types.find(index);

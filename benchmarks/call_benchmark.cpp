@@ -145,4 +145,31 @@ BENCHMARK_F(BenchmarkBase, LambdaAsMember)(benchmark::State& state) {
     lua_pop(L, 1);
 }
 
+#if 1
+
 BENCHMARK_MAIN();
+
+#else
+int main() {
+    lua_State* L = luaL_newstate();
+    luaL_openlibs(L);
+
+    // lua_pushcfunction(L, errorHandler);
+    //  int errorHandlerIdx = lua_gettop(L);
+
+    int x = 0;
+    luabind::class_<Test>(L, "Test")
+        .class_function("luaFunction", &Test::luaFunction)
+        .class_function("classFunction", &Test::classFunction)
+        .function("memberFunction", &Test::memberFunction)
+        .function("statelessLambda", [](Test* t) { t->x = 0; })
+        .function("lambda", [x](Test* t) {
+            (void)x;
+            t->x = 0;
+        });
+
+    luabind::function(L, "globLuaFunction", &globalLuaFunction);
+
+    luaL_dostring(L, "t = Test:new(); for i = 1,1000000 do t:memberFunction() end");
+}
+#endif
