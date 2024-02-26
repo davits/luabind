@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
 
-include(CMakeDependentOption)
-
 project(luabind)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -10,10 +8,15 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(LUABIND_LUA_LIB_NAME luabind_lua CACHE STRING "CMake name of lua library, luabind should be linked with.")
 set(LUABIND_LUA_CPP OFF CACHE BOOL "Whether lua was compiled as C++ and headers should be included without extern 'C'.")
 
-option(LUABIND_TESTS "Enable tests." OFF)
-cmake_dependent_option(LUABIND_UNIT_TESTS "Enable unit tests." OFF "LUABIND_TESTS" OFF)
-cmake_dependent_option(LUABIND_BENCHMARKS "Enable unit tests." OFF "LUABIND_TESTS" OFF)
+option(LUABIND_UNIT_TESTS "Enable unit tests." OFF)
+option(LUABIND_BENCHMARKS "Enable benchmarks." OFF)
 option(LUABIND_CODE_COVERAGE "Enable coverage reporting in tests" OFF)
+
+if (LUABIND_UNIT_TESTS OR LUABIND_BENCHMARKS)
+    set(LUABIND_TESTS ON)
+else()
+    set(LUABIND_TESTS OFF)
+endif()
 
 add_subdirectory(third_party)
 
