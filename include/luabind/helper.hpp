@@ -132,17 +132,14 @@ using first_arg_t = function_first_arg_t<signature_t<F>>;
 template <typename T>
 using strip_t = std::remove_const_t<std::remove_pointer_t<std::remove_cvref_t<T>>>;
 
-template <typename Functor, typename Class>
-concept ValidMemberFunctor =
-    LuaCFunction<Functor> ||
-    ((std::is_pointer_v<first_arg_t<Functor>> ||
-      std::is_reference_v<first_arg_t<Functor>>)&&std::is_same_v<strip_t<first_arg_t<Functor>>, Class>);
-
 template <typename F>
 using self_t = typename callable_helper<std::remove_cvref_t<F>>::self_type;
 
 template <typename F>
 constexpr bool is_lua_c_function_v = LuaCFunction<F>;
+
+template <typename F>
+constexpr bool is_lua_c_lambda_v = CallableObject<F> && std::is_same_v<signature_t<F>, int(lua_State*)>;
 
 template <typename F>
 constexpr bool is_function_ptr_v = std::is_pointer_v<F> && std::is_function_v<std::remove_pointer_t<F>>;
@@ -152,6 +149,12 @@ constexpr bool stateless_lambda_v = StatelessLambda<F>;
 
 template <typename F>
 constexpr bool callable_object_v = CallableObject<F>;
+
+template <typename Functor, typename Class>
+concept ValidMemberFunctor =
+    is_lua_c_function_v<Functor> || is_lua_c_lambda_v<Functor> ||
+    ((std::is_pointer_v<first_arg_t<Functor>> ||
+      std::is_reference_v<first_arg_t<Functor>>)&&std::is_same_v<strip_t<first_arg_t<Functor>>, Class>);
 
 } // namespace luabind
 

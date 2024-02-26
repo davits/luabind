@@ -87,6 +87,9 @@ struct mem_fun_wrapper<R (T::*)(Args...)> {
 };
 
 template <typename R, typename T, typename... Args>
+struct mem_fun_wrapper<R (T::*)(Args...) noexcept> : mem_fun_wrapper<R (T::*)(Args...)> {};
+
+template <typename R, typename T, typename... Args>
 struct mem_fun_wrapper<R (T::*)(Args...) const> {
     using Ptr = R (T::*)(Args...) const;
     Ptr func;
@@ -99,8 +102,18 @@ struct mem_fun_wrapper<R (T::*)(Args...) const> {
     }
 };
 
+template <typename R, typename T, typename... Args>
+struct mem_fun_wrapper<R (T::*)(Args...) const noexcept> : mem_fun_wrapper<R (T::*)(Args...) const> {};
+
 template <typename Functor, typename Signature, size_t ArgStart>
 struct invoker;
+
+template <typename Functor, size_t ArgStart>
+struct invoker<Functor, int(lua_State*), ArgStart> {
+    static int invoke(lua_State* L, Functor& func) {
+        return func(L);
+    }
+};
 
 template <typename Functor, typename R, typename... Args, size_t ArgStart>
 struct invoker<Functor, R(Args...), ArgStart> {
@@ -190,7 +203,7 @@ template <typename Functor, size_t ArgStart = 1>
 void functor_to_lua(lua_State* L, Functor&& func) {
     using F = std::remove_cvref_t<Functor>;
     if constexpr (is_lua_c_function_v<F>) {
-        lua_pushcfunction(L, func);
+        lua_pushcfunction(L, static_cast<lua_CFunction>(func));
     } else if constexpr (std::is_member_function_pointer_v<F>) {
         functor_to_lua(L, mem_fun_wrapper<F>(func));
     } else if (is_function_ptr_v<F>) {

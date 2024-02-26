@@ -63,13 +63,6 @@ public:
         return *this;
     }
 
-    template <ValidMemberFunctor<Type> Func>
-    class_& function(const std::string_view name, Func&& func) {
-        functor_to_lua(_L, std::forward<Func>(func));
-        _info->set_function(_L, std::string {name});
-        return *this;
-    }
-
     template <typename Func>
     class_& class_function(const std::string_view name, Func&& func) {
         _info->get_metatable(_L);
@@ -77,6 +70,14 @@ public:
         class_functor_to_lua(_L, std::forward<Func>(func));
         lua_rawset(_L, -3);
         lua_pop(_L, 1); // pop metatable
+        return *this;
+    }
+
+public:
+    template <ValidMemberFunctor<Type> Func>
+    class_& function(const std::string_view name, Func&& func) {
+        functor_to_lua(_L, std::forward<Func>(func));
+        _info->set_function(_L, std::string {name});
         return *this;
     }
 
@@ -185,6 +186,7 @@ private:
         return -1;
     }
 
+private:
     static int new_index(lua_State* L) {
         auto* ud = user_data::from_lua(L, 1);
         int r = new_index_impl(L, ud->info);

@@ -21,7 +21,8 @@
       "name": "unit_tests",
       "inherits": "luabind",
       "cacheVariables": {
-        "LUABIND_UNIT_TESTS": "ON"
+        "LUABIND_UNIT_TESTS": "ON",
+        "LUABIND_BENCHMARKS": "OFF"
       }
     },
     {
@@ -29,6 +30,7 @@
       "inherits": "luabind",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "LUABIND_UNIT_TESTS": "OFF",
         "LUABIND_BENCHMARKS": "ON"
       }
     }
