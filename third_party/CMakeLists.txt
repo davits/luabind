@@ -4,4 +4,5 @@ endif()
 
 if(LUABIND_TESTS)
     add_subdirectory(googletest)
+    add_subdirectory(benchmark)
 endif()

@@ -52,14 +52,15 @@ std::shared_ptr<Base> create(std::string_view name) {
 class BaseClassBindingTest : public LuaTest {
 protected:
     void SetUp() override {
-        luabind::class_<Base>(L, "Base").function<&Base::type>("type");
+        const int top = lua_gettop(L);
+        luabind::class_<Base>(L, "Base").function("type", &Base::type);
         luabind::class_<Derived3, Base>(L, "Derived3")
             .construct_shared<>("makeShared")
-            .function<&Derived3::childFunction>("childFunction");
-        luabind::function<&create>(L, "create");
-        luabind::function<&usage>(L, "usage");
+            .function("childFunction", &Derived3::childFunction);
+        luabind::function(L, "create", &create);
+        luabind::function(L, "usage", &usage);
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 };
 

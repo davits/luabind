@@ -47,13 +47,14 @@ private:
 class CustomFunctionTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         luabind::class_<IntWrapper>(L, "IntWrapper")
-            .constructor<IntWrapper::constructor>("new")
-            .class_function<IntWrapper::create>("create")
-            .function<IntWrapper::toLuaTable>("toTable")
-            .property_readonly<IntWrapper::luaTable>("table");
+            .constructor("new", &IntWrapper::constructor)
+            .class_function("create", &IntWrapper::create)
+            .function("toTable", &IntWrapper::toLuaTable)
+            .property("table", &IntWrapper::luaTable);
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 };
 

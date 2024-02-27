@@ -6,11 +6,8 @@
 #include "type_storage.hpp"
 #include "user_data.hpp"
 
-#include <map>
 #include <memory>
 #include <string>
-#include <typeindex>
-#include <unordered_map>
 
 namespace luabind {
 
@@ -243,37 +240,6 @@ struct value_mirror<std::string*> {};
 
 template <>
 struct value_mirror<const std::string*> {};
-
-template <typename T, typename Y>
-struct value_mirror<std::pair<T, Y>> {
-    using type = std::pair<T, Y>;
-
-    static int to_lua(lua_State* L, const type& v) {
-        lua_createtable(L, 2, 0);
-        int t = lua_gettop(L);
-        value_mirror<T>::to_lua(L, v.first);
-        lua_rawseti(L, t, 1);
-        value_mirror<Y>::to_lua(L, v.second);
-        lua_rawseti(L, t, 2);
-        return 1;
-    }
-
-    static type from_lua(lua_State* L, int idx) {
-        if (lua_istable(L, idx) == 0) {
-            reportError("Provided argument at %i for the pair is not a table.", idx);
-        }
-        if (lua_rawlen(L, idx) != 2) {
-            reportError("Provided table at %i for the pair value has invalid length.", idx);
-        }
-        lua_rawgeti(L, idx, 1);
-        T f = value_mirror<T>::from_lua(L, -1);
-        lua_pop(L, 1);
-        lua_rawgeti(L, idx, 2);
-        Y s = value_mirror<Y>::from_lua(L, -1);
-        lua_pop(L, 1);
-        return {f, s};
-    }
-};
 
 } // namespace luabind
 

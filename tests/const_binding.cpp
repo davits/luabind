@@ -24,13 +24,14 @@ public:
 class StrLuaTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         luabind::class_<StringBox>(L, "StringBox")
             .constructor<const std::string&>("new")
-            .function<&StringBox::set>("set")
-            .function<&StringBox::get>("get")
-            .property<&StringBox::str>("str");
+            .function("set", &StringBox::set)
+            .function("get", &StringBox::get)
+            .property("str", &StringBox::str);
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 };
 

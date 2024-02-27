@@ -1,10 +1,9 @@
 [![Unit tests](https://github.com/davits/luabind/actions/workflows/unit_tests.yml/badge.svg?branch=master&event=push)](https://github.com/davits/luabind/actions/workflows/unit_tests.yml)
 [![codecov](https://codecov.io/gh/davits/luabind/graph/badge.svg?token=WOZ5J1HU3F)](https://codecov.io/gh/davits/luabind)
 
-Luabind is a small header only library aiming to provide easy means to expose C++ functionality in Lua.
-Currently it supports inheritance, binding of class member functions, static functions, member variables and global functions.
+Luabind is a small header only library aiming to provide easy means to expose C++ types in Lua.
 
-It uses variadic template magic to generate code for you, which handles function arguments transition from Lua to C++, function call, and transition result back to Lua.
+It uses variadic template magic to generate code for you, which handles function arguments transition from Lua to C++, function call, and transition of result back to Lua.
 
 ## Example
 ```cpp
@@ -15,7 +14,7 @@ public:
     void credit(int amount);
     void debit(int amount);
 
-public: // public for demonstative purposes
+public: // public for the sake of the example
     int balance;
 };
 
@@ -36,14 +35,15 @@ lua_State* L = luaL_newstate();
 luaL_openlibs(L);
 luabind::class_<Account>(L, "Account")
     .constructor<int>("new")
-    .function<&Account::credit>("credit")
-    .function<&Account::debit>("debit")
-    .property_readonly<&Account::balance>("balance");
+    .function("credit", &Account::credit)
+    .function("debit", &Account::debit)
+    .property_readonly("balance", &Account::balance);
 
 luabind::class_<SpecialAccount, Account>(L, "SpecialAccount")
     .constructor<int, int>("new")
     .construct_shared<int, int>("create")
-    .property_readonly<&SpecialAccount::getOverdraft>("overdraft");
+    .property_readonly("overdraft", &SpecialAccount::getOverdraft)
+    .property("availableBalance", [](SpecialAccount& self) { return self.balance + self.getOverdraft(); });
 
 luaL_dostring(L, R"--(
     a = Account:new(10)
@@ -53,6 +53,9 @@ luaL_dostring(L, R"--(
     s:credit(20)
     s = SpecialAccount:create(50, 10) " Represented by C++ shared_ptr on lua stack.
     s:credit(20)
+    print(s.balance)
+    print(s.overdraft)
+    print(s.availableBalance)
 )--");
 ```
 ## How to install, configure, build and run
@@ -88,4 +91,5 @@ Here are some control variables, which will help to fine tune integration:
 | ------ | ------ |
 | LUABIND_LUA_LIB_NAME (STRING) | cmake name of the Lua library to use (default: luabind_lua) |
 | LUABIND_LUA_CPP (BOOL) | option indicating whether Lua headers should be included as C++ code. (default: OFF) |
-| LUABIND_TESTS (BOOL) | option to enable luabind tests (default: OFF) |
+| LUABIND_UNIT_TESTS (BOOL) | option to enable luabind tests (default: OFF) |
+| LUABIND_BENCHMARKS (BOOL) | option to enable luabind benchmarks (default: OFF) |

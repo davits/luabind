@@ -16,20 +16,54 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "LUABIND_TESTS": "ON"
       }
+    },
+    {
+      "name": "unit_tests",
+      "inherits": "luabind",
+      "cacheVariables": {
+        "LUABIND_UNIT_TESTS": "ON",
+        "LUABIND_BENCHMARKS": "OFF"
+      }
+    },
+    {
+      "name": "benchmarks",
+      "inherits": "luabind",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LUABIND_UNIT_TESTS": "OFF",
+        "LUABIND_BENCHMARKS": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
-      "name": "luabind",
-      "displayName": "luabind",
-      "configurePreset": "luabind"
+      "name": "unit_tests",
+      "displayName": "Unit tests",
+      "configurePreset": "unit_tests"
+    },
+    {
+      "name": "benchmarks",
+      "displayName": "Benchmarks",
+      "configurePreset": "benchmarks"
     }
   ],
   "testPresets": [
     {
       "name": "unit_tests",
       "displayName": "Unit Tests",
-      "configurePreset": "luabind",
+      "configurePreset": "unit_tests",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      }
+    },
+    {
+      "name": "benchmarks",
+      "displayName": "Benchmarks",
+      "configurePreset": "benchmarks",
       "output": {
         "outputOnFailure": true
       },

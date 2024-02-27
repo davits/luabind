@@ -55,35 +55,37 @@ Numeric toNumeric(const String&) {
 class StrLuaTest : public LuaTest {
 protected:
     void SetUp() override {
+        const int top = lua_gettop(L);
         luabind::class_<String>(L, "String")
             .constructor<const std::string_view>("new")
             .construct_shared<const std::string_view>("create")
-            .class_function<&String::createString>("createString")
-            .function<&String::set>("set")
-            .function<&String::get>("get")
-            .property<&String::str>("str")
-            .function<&String::copy>("copy")
-            .function<&String::copyFrom>("copyFrom")
-            .function<&String::customError>("customError");
+            .class_function("createString", &String::createString)
+            .function("set", &String::set)
+            .function("get", &String::get)
+            .property("str", &String::str)
+            .function("copy", &String::copy)
+            .function("copyFrom", &String::copyFrom)
+            .function("customError", &String::customError);
 
         luabind::class_<Numeric>(L, "Numeric")
             .construct_shared<>("create")
-            .function<&Numeric::boolean>("boolean")
-            .function<&Numeric::integral>("integral")
-            .function<&Numeric::floating>("floating");
+            .function("boolean", &Numeric::boolean)
+            .function("integral", &Numeric::integral)
+            .function("floating", &Numeric::floating);
 
-        luabind::function<&toNumeric>(L, "toNumeric");
+        luabind::function(L, "toNumeric", &toNumeric);
 
-        EXPECT_EQ(lua_gettop(L), 0);
+        EXPECT_EQ(lua_gettop(L), top);
     }
 };
 
 TEST_F(StrLuaTest, MirrorErrors) {
+    // clang-format off
     runExpectingError(R"--(
         u = Numeric:new()
         a = String:new(u)
     )--",
-                      "Argument at 2 has invalid type. Expecting 'string', but got 'userdata'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'string', but got 'userdata'."));
 
     runExpectingError(
         R"--(
@@ -92,28 +94,30 @@ TEST_F(StrLuaTest, MirrorErrors) {
         a:copyFrom(b) -- ok
         a:copyFrom('abcd') -- should result in error
     )--",
-        "Argument at 2 has invalid type. Expecting user_data of type 'String', but got lua type 'string'");
+        testing::StartsWith(
+            "Argument at 2 has invalid type. Expecting user_data of type 'String', but got lua type 'string'"));
 
     runExpectingError(R"--(
         a = String:new('aaa')
         b = String:new('bbb')
         a:copyFrom(b)
     )--",
-                      "Argument at 2 is not a shared_ptr.");
+        testing::StartsWith("Argument at 2 is not a shared_ptr."));
 
     runExpectingError(R"--(
         a = String:new('aaa')
         b = Numeric:create()
         a:copyFrom(b)
     )--",
-                      "Argument at 2 has invalid type. Expecing 'String' but got 'Numeric'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecing 'String' but got 'Numeric'."));
 
     runExpectingError(
         R"--(
         a = String:new('aaa')
         a:copy(555)
     )--",
-        "Argument at 2 has invalid type. Expecting user_data of type 'String', but got lua type 'number'");
+        testing::StartsWith(
+            "Argument at 2 has invalid type. Expecting user_data of type 'String', but got lua type 'number'"));
 
     runExpectingError(
         R"--(
@@ -121,7 +125,7 @@ TEST_F(StrLuaTest, MirrorErrors) {
         b = Numeric:new()
         a:copy(b)
     )--",
-        "Argument at 2 has invalid type. Expecting 'String' but got 'Numeric'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'String' but got 'Numeric'."));
 
     runExpectingError(
         R"--(
@@ -130,7 +134,7 @@ TEST_F(StrLuaTest, MirrorErrors) {
         b:boolean(false)
         b:boolean(1)
     )--",
-        "Argument at 2 has invalid type. Expecting 'boolean', but got 'number'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'boolean', but got 'number'."));
 
     runExpectingError(
         R"--(
@@ -138,14 +142,14 @@ TEST_F(StrLuaTest, MirrorErrors) {
         b:integral(1)
         b:integral('abc')
     )--",
-        "Argument at 2 has invalid type. Expecting 'integer', but got 'string'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'integer', but got 'string'."));
 
     runExpectingError(
         R"--(
         u = Numeric:new()
         b:integral(1.5)
     )--",
-        "Argument at 2 has invalid type. Expecting 'integer', but got 'number'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'integer', but got 'number'."));
 
     runExpectingError(
         R"--(
@@ -153,7 +157,8 @@ TEST_F(StrLuaTest, MirrorErrors) {
         b:floating(1.5)
         b:floating('abc')
     )--",
-        "Argument at 2 has invalid type. Expecting 'number', but got 'string'.");
+        testing::StartsWith("Argument at 2 has invalid type. Expecting 'number', but got 'string'."));
+    // clang-format on
 }
 
 TEST_F(StrLuaTest, WrapperErrors) {
@@ -161,72 +166,72 @@ TEST_F(StrLuaTest, WrapperErrors) {
         R"--(
         s = String:new()
     )--",
-        "Invalid number of arguments, should be 1, but 0 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 0 were given."));
 
     runExpectingError(
         R"--(
         s = String:new('abc', 1)
     )--",
-        "Invalid number of arguments, should be 1, but 2 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 2 were given."));
 
     runExpectingError(
         R"--(
         s = String:create()
     )--",
-        "Invalid number of arguments, should be 1, but 0 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 0 were given."));
 
     runExpectingError(
         R"--(
         s = String:create('abc', 1)
     )--",
-        "Invalid number of arguments, should be 1, but 2 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 2 were given."));
 
     runExpectingError(
         R"--(
         s = String:createString()
     )--",
-        "Invalid number of arguments, should be 1, but 0 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 0 were given."));
 
     runExpectingError(
         R"--(
         s = String:createString('abc', 1)
     )--",
-        "Invalid number of arguments, should be 1, but 2 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 2 were given."));
 
     runExpectingError(
         R"--(
         s = String:new('abc')
         s:set()
     )--",
-        "Invalid number of arguments, should be 1, but 0 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 2, but 1 were given."));
 
     runExpectingError(
         R"--(
         s = String:createString('abc')
         s:set('def', 2, 3)
     )--",
-        "Invalid number of arguments, should be 1, but 3 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 2, but 4 were given."));
 
     runExpectingError(
         R"--(
         s = String:create('abc')
         s:customError(true)
     )--",
-        "Custom std::error");
+        testing::StartsWith("Custom std::error"));
 
     runExpectingError(
         R"--(
         s = String:create('abc')
         s:customError(false)
     )--",
-        "Unknown exception while trying to call C function from Lua.");
+        testing::StartsWith("Unknown exception while trying to call C function from Lua."));
 
     runExpectingError(
         R"--(
         s = String:create('abc')
         n = toNumeric()
     )--",
-        "Invalid number of arguments, should be 1, but 0 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 0 were given."));
 
     runExpectingError(
         R"--(
@@ -234,5 +239,5 @@ TEST_F(StrLuaTest, WrapperErrors) {
         n = toNumeric(s)
         n = toNumeric(s, 2)
     )--",
-        "Invalid number of arguments, should be 1, but 2 were given.");
+        testing::StartsWith("Invalid number of arguments, should be 1, but 2 were given."));
 }
