@@ -69,8 +69,6 @@ git submodule update --recursive --init
 
 cmake --preset luabind
 
-cmake --build --preset luabind
-
 ctest --preset unit_tests
 ```
 
