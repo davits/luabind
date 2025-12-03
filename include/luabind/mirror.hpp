@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace luabind {
 
@@ -240,6 +241,53 @@ struct value_mirror<std::string*> {};
 
 template <>
 struct value_mirror<const std::string*> {};
+
+// STL Container Support: std::vector<int>
+template <>
+struct value_mirror<std::vector<int>> {
+    static int to_lua(lua_State* L, const std::vector<int>& v) {
+        lua_newtable(L);
+        for (size_t i = 0; i < v.size(); ++i) {
+            lua_pushinteger(L, static_cast<lua_Integer>(i + 1)); // Lua uses 1-based indexing
+            lua_pushinteger(L, static_cast<lua_Integer>(v[i]));
+            lua_settable(L, -3);
+        }
+        return 1;
+    }
+
+    static std::vector<int> from_lua(lua_State* L, int idx) {
+        if (lua_type(L, idx) != LUA_TTABLE) {
+            reportError("Argument at %i has invalid type. Expecting 'table', but got '%s'.",
+                        idx,
+                        lua_typename(L, lua_type(L, idx)));
+        }
+        
+        std::vector<int> result;
+        const int abs_idx = lua_absindex(L, idx);
+        const lua_Integer len = luaL_len(L, abs_idx); // Get array length
+        
+        result.reserve(static_cast<size_t>(len));
+        
+        for (lua_Integer i = 1; i <= len; ++i) {
+            lua_geti(L, abs_idx, i);
+            if (lua_isinteger(L, -1)) {
+                result.push_back(static_cast<int>(lua_tointeger(L, -1)));
+            } else {
+                lua_pop(L, 1); // Pop value
+                reportError("Argument at %i contains non-integer value at index %lld.", idx, static_cast<long long>(i));
+            }
+            lua_pop(L, 1); // Pop value
+        }
+        
+        return result;
+    }
+};
+
+template <>
+struct value_mirror<const std::vector<int>&> : value_mirror<std::vector<int>> {};
+
+template <>
+struct value_mirror<const std::vector<int>> : value_mirror<std::vector<int>> {};
 
 } // namespace luabind
 

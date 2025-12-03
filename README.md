@@ -60,7 +60,7 @@ luaL_dostring(L, R"--(
 ```
 ## How to install, configure, build and run
 
-Ordinary prcedure when developing and testing `luabind` library.
+Ordinary procedure when developing and testing `luabind` library.
 
 ```sh
 git clone https://github.com/davits/luabind.git

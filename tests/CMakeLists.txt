@@ -28,4 +28,8 @@ add_executable(errors errors.cpp lua_test.hpp)
 target_link_libraries(errors luabind gtest_main gmock)
 gtest_discover_tests(errors DISCOVERY_MODE PRE_TEST EXTRA_ARGS "--gtest_color=always")
 
+add_executable(vector_binding vector_binding.cpp lua_test.hpp)
+target_link_libraries(vector_binding luabind gtest_main gmock)
+gtest_discover_tests(vector_binding DISCOVERY_MODE PRE_TEST EXTRA_ARGS "--gtest_color=always")
+
 
