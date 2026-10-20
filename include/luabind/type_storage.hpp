@@ -29,7 +29,7 @@ struct entry {
     }
 
     static entry none() {
-        return entry {.type = entry_type::none};
+        return entry {.type = entry_type::none, .getter = 0, .setter = 0};
     }
 
     static entry function(int idx) {
@@ -131,34 +131,39 @@ struct type_info {
      * [-1, +0, -]
      */
     void set_function(lua_State* L, std::string&& name) {
+        reserve(1);
         lua_xmove(L, storage, 1);
         const int idx = lua_gettop(storage);
-        entries.try_emplace(std::move(name), entry::function(idx));
+        entries.insert_or_assign(std::move(name), entry::function(idx));
     }
 
     // [-1, +0, -]
     void set_property_readonly(lua_State* L, std::string&& name) {
+        reserve(1);
         lua_xmove(L, storage, 1);
         const int idx = lua_gettop(storage);
-        entries.try_emplace(std::move(name), entry::property(idx));
+        entries.insert_or_assign(std::move(name), entry::property(idx));
     }
 
     // [-2, +0, -]
     void set_property(lua_State* L, std::string&& name) {
+        reserve(2);
         lua_xmove(L, storage, 2);
         const int setter_idx = lua_gettop(storage);
         const int getter_idx = setter_idx - 1;
-        entries.try_emplace(std::move(name), entry::property(getter_idx, setter_idx));
+        entries.insert_or_assign(std::move(name), entry::property(getter_idx, setter_idx));
     }
 
     // [-1, +0, -]
     void set_array_getter(lua_State* L) {
+        reserve(1);
         lua_xmove(L, storage, 1);
         array_getter = lua_gettop(storage);
     }
 
     // [-2, +0, -]
     void set_array_access(lua_State* L) {
+        reserve(2);
         lua_xmove(L, storage, 2);
         array_setter = lua_gettop(storage);
         array_getter = array_setter - 1;
@@ -181,6 +186,15 @@ struct type_info {
         lua_pushvalue(storage, array_setter);
         lua_xmove(storage, L, 1);
         return lua_type(L, -1);
+    }
+
+private:
+    // Makes room on `storage` for `n` more values, plus the one a lookup pushes there on its way to the caller.
+    // `lua_xmove` does not grow the stack it moves to.
+    void reserve(int n) {
+        if (lua_checkstack(storage, n + 1) == 0) {
+            reportError("Type '%s' binds more values than a Lua stack holds.", name.c_str());
+        }
     }
 };
 

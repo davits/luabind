@@ -47,8 +47,11 @@ struct value_mirror<T*> {
                         type_storage::type_name<T>(L).data(),
                         lua_typename(L, lua_type(L, idx)));
         }
-        auto p = dynamic_cast<T*>(ud->object);
-        if (p == nullptr && ud->object != nullptr) [[unlikely]] {
+        if (ud->object() == nullptr) [[unlikely]] {
+            reportError("Argument at %i is a deleted '%s'.", idx, type_storage::type_name<T>(L).data());
+        }
+        auto p = dynamic_cast<T*>(ud->object());
+        if (p == nullptr) [[unlikely]] {
             reportError("Argument at %i has invalid type. Expecting '%s' but got '%s'.",
                         idx,
                         type_storage::type_name<T>(L).data(),
@@ -84,6 +87,9 @@ struct value_mirror<std::shared_ptr<T>> {
                         idx,
                         type_storage::type_name<T>(L).data(),
                         lua_typename(L, lua_type(L, idx)));
+        }
+        if (ud->object() == nullptr) [[unlikely]] {
+            reportError("Argument at %i is a deleted '%s'.", idx, type_storage::type_name<T>(L).data());
         }
         auto sud = dynamic_cast<shared_user_data*>(ud);
         if (sud == nullptr) [[unlikely]] {

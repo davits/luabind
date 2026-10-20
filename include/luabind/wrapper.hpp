@@ -206,7 +206,7 @@ void functor_to_lua(lua_State* L, Functor&& func) {
         lua_pushcfunction(L, static_cast<lua_CFunction>(func));
     } else if constexpr (std::is_member_function_pointer_v<F>) {
         functor_to_lua(L, mem_fun_wrapper<F>(func));
-    } else if (is_function_ptr_v<F>) {
+    } else if constexpr (is_function_ptr_v<F>) {
         functor_wrapper<F, ArgStart>::to_lua(L, func);
     } else if constexpr (stateless_lambda_v<F>) {
         auto fptr = static_cast<lambda_convertible_t<F>>(func);

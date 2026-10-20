@@ -508,3 +508,21 @@ TEST_F(ArrayTest, ReadOnlyArrayAccess) {
     )--");
     EXPECT_EQ(r, LUA_OK);
 }
+
+class Wide : public luabind::Object {
+public:
+    int value() const {
+        return 7;
+    }
+};
+
+class WideBindingTest : public LuaTest {};
+
+TEST_F(WideBindingTest, BindsMoreValuesThanTheStorageReserves) {
+    luabind::class_<Wide> wide(L, "Wide");
+    for (int i = 0; i < 300; ++i) {
+        wide.function("f" + std::to_string(i), &Wide::value);
+        wide.property("p" + std::to_string(i), [](const Wide*) { return 1; }, [](Wide*, int) {});
+    }
+    EXPECT_EQ(runWithResult<int>("local w = Wide:new() return w:f0() + w:f299() + w.p0 + w.p299"), 16);
+}

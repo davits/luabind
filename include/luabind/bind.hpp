@@ -82,7 +82,7 @@ public:
     }
 
     template <typename Member>
-    class_& property_readonly(const std::string_view name, Member Type::*memberPtr) {
+    class_& property_readonly(const std::string_view name, Member Type::* memberPtr) {
         return property(name, [memberPtr](const Type* obj) { return (obj->*memberPtr); });
     }
 

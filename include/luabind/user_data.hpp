@@ -13,24 +13,32 @@ enum class memory_lifetime { lua, cpp, shared };
 
 class user_data {
 public:
-    Object* const object;
     type_info* const info;
     const memory_lifetime lifetime;
 
 protected:
     user_data(Object* object, type_info* info, memory_lifetime lifetime)
-        : object(object)
-        , info(info)
-        , lifetime(lifetime) {}
+        : info(info)
+        , lifetime(lifetime)
+        , _object(object) {}
 
     template <typename T>
     user_data(lua_State* L, T* object, memory_lifetime lifetime)
         : user_data(object, type_storage::find_type_info(L, object), lifetime) {}
 
+    // Destroys what this user data holds. The user data itself is never destroyed: Lua frees its memory
+    // without running a destructor, so `_object` stays readable and tells a deleted handle from a live one. A
+    // destructor could not mark that: its stores are to an object whose lifetime is ending, and an optimizer may
+    // drop them.
+    virtual void destroy() noexcept = 0;
+
 public:
-    virtual ~user_data() {
-        const_cast<Object*&>(object) = nullptr;
-    };
+    virtual ~user_data() = default;
+
+    // The object, or nullptr once deleted. Nothing else is null: pushing a null pointer throws (`typeid` of it).
+    Object* object() const {
+        return _object;
+    }
 
     static user_data* from_lua(lua_State* L, int idx) {
         if (lua_islightuserdata(L, idx) == 1) {
@@ -68,18 +76,31 @@ public:
     }
 
     static int destruct(lua_State* L) {
-        user_data* ud = from_lua(L, -1);
-        if (ud->object != nullptr) {
-            ud->~user_data();
+        user_data* ud = from_lua(L, 1);
+        if (ud == nullptr) {
+            return luaL_typeerror(L, 1, "userdata");
+        }
+        if (ud->_object != nullptr) {
+            ud->_object = nullptr;
+            ud->destroy();
         }
         return 0;
     }
+
+private:
+    template <typename T>
+    friend class lua_user_data;
+
+    Object* _object;
 };
 
 template <typename T>
 class lua_user_data : user_data {
 public:
-    T data;
+    // A union member: `destroy` ends its lifetime, and nothing destroys it again.
+    union {
+        T data;
+    };
 
     template <typename... Args>
     lua_user_data(lua_State* L, Args&&... args)
@@ -87,8 +108,10 @@ public:
         , data(std::forward<Args>(args)...) {
         // do not pass &data in user_data ctor, because in case of virtual inheritance
         // cast to Object* is implicitly dynamic_cast and needs fully initialized data
-        const_cast<Object*&>(object) = &data;
+        _object = &data;
     }
+
+    ~lua_user_data() override {}
 
     template <typename... Args>
     static int to_lua(lua_State* L, Args&&... args) {
@@ -102,6 +125,11 @@ public:
         }
         lua_setmetatable(L, -2);
         return 1;
+    }
+
+protected:
+    void destroy() noexcept override {
+        data.~T();
     }
 };
 
@@ -124,6 +152,9 @@ struct cpp_user_data : user_data {
         lua_setmetatable(L, -2);
         return 1;
     }
+
+protected:
+    void destroy() noexcept override {} // C++ owns the object
 };
 
 struct shared_user_data : user_data {
@@ -145,6 +176,11 @@ struct shared_user_data : user_data {
         }
         lua_setmetatable(L, -2);
         return 1;
+    }
+
+protected:
+    void destroy() noexcept override {
+        data.reset();
     }
 };
 
